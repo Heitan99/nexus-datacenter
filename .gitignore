@@ -1,0 +1,57 @@
+# ============================================================================
+#  .gitignore — NEXUS (gemelo digital de data center)
+#  Todo lo que sea entorno, datos de ejecución o credenciales locales queda
+#  fuera del repositorio.
+# ============================================================================
+
+# --- Entornos virtuales de Python -------------------------------------------
+cps_ia/.venv/
+.venv/
+venv/
+ENV/
+env/
+
+# --- Caché y artefactos de Python -------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Estado y datos generados en tiempo de ejecución ------------------------
+.nexus/
+cps_ia/datacenter_historico.db*
+cps_ia/datacenter_lecturas.csv
+cps_ia/datacenter_diagnosticos.csv
+
+# --- Credenciales locales (NUNCA se versionan) ------------------------------
+cps_ia/mqtt_credenciales.json
+js/telegram-config.json
+.env
+.env.*
+
+# --- Logs y temporales ------------------------------------------------------
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+
+# --- Lanzadores locales (no se publican) ------------------------------------
+/iniciar_nexus.cmd
+/detener_nexus.cmd
+
+# --- Sistema operativo y editores -------------------------------------------
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- Modelos 3D -------------------------------------------------------------
+# assets/datacenter.glb SÍ se versiona, pero a través de Git LFS
+# (ver .gitattributes). No lo añadas aquí.

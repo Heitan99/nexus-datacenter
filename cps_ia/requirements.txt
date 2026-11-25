@@ -1,0 +1,26 @@
+# ============================================================================
+#  Dependencias del motor de IA (cps_ia/)
+# ----------------------------------------------------------------------------
+#  Instalación recomendada en Windows con GPU NVIDIA (CUDA 13.x):
+#
+#      python -m venv cps_ia/.venv
+#      cps_ia\.venv\Scripts\python.exe -m pip install --upgrade pip
+#      cps_ia\.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cu134
+#      cps_ia\.venv\Scripts\python.exe -m pip install -r cps_ia/requirements.txt
+#
+#  Sin GPU, instala la versión CPU de torch antes de este archivo:
+#      pip install torch --index-url https://download.pytorch.org/whl/cpu
+# ============================================================================
+
+# Motor de predicción
+chronos-forecasting==2.3.2
+
+# Broker / mensajería
+paho-mqtt==2.2.0
+
+# Ciencia de datos (chronos-forecasting ya las trae, se fijan para reproducibilidad)
+numpy==2.5.5
+pandas==3.1.1
+
+# PyTorch: se instala aparte según GPU/CPU (ver cabecera).
+torch>=2.0

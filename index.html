@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#04070c" />
+  <meta
+    name="description"
+    content="Gemelo digital 3D de un Data Center con telemetría IoT, alertas y predicción de fallos."
+  />
+  <title>NEXUS · Gemelo Digital | Data Center</title>
+
+  <!-- Favicon embebido (evita el 404 de /favicon.ico) -->
+  <link
+    rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23040a12'/%3E%3Crect x='3' y='3' width='58' height='58' rx='10' fill='none' stroke='%2322d3ee' stroke-width='2'/%3E%3Ctext x='32' y='43' font-family='monospace' font-size='24' font-weight='bold' fill='%237df9ff' text-anchor='middle'%3EDC%3C/text%3E%3C/svg%3E"
+  />
+
+  <!-- Tipografías del HUD -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Estilos propios -->
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Librerías globales por CDN (gsap, Chart y mqtt como globales) -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt@5.16.1/dist/mqtt.min.js"></script>
+
+  <!-- Three.js + addons mediante importmap -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+
+<body>
+  <div id="app">
+    <!-- Lienzo 3D -->
+    <canvas id="scene" aria-label="Visualización 3D del Data Center"></canvas>
+
+    <!-- Capa de etiquetas CSS2D (la rellena ui.js) -->
+    <div id="labels-layer" aria-hidden="true"></div>
+
+    <!-- Capas decorativas -->
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <!-- CABECERA -->
+    <header class="hud-top">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">DC</div>
+        <div class="brand-text">
+          <h1>NEXUS · DIGITAL TWIN</h1>
+          <p>Data Center · Monitoreo IoT en tiempo real</p>
+        </div>
+      </div>
+
+      <div class="clock" aria-hidden="true">
+        <span id="clock">--:--:--</span>
+        <small id="date">—</small>
+      </div>
+    </header>
+
+    <!-- PANEL PRINCIPAL -->
+    <aside class="panel panel-principal" aria-label="Telemetría global del Data Center">
+      <div class="panel-head">
+        <span class="panel-title">TELEMETRÍA GLOBAL</span>
+        <span class="live"><i class="live-dot" aria-hidden="true"></i>EN VIVO</span>
+      </div>
+
+      <div class="metrics">
+        <article class="metric" id="temp-card">
+          <div class="metric-label">
+            <span>Temperatura Real</span>
+            <span class="metric-flags">
+              <span class="src-tag" id="temp-src">—</span>
+              <span class="tag" id="temp-tag">—</span>
+            </span>
+          </div>
+          <div class="metric-value">
+            <span id="temp-value">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="bar" aria-hidden="true"><div class="bar-fill" id="temp-bar"></div></div>
+        </article>
+
+        <article class="metric" id="ups-card">
+          <div class="metric-label">
+            <span>Estado UPS</span>
+            <span class="metric-flags">
+              <span class="src-tag" id="ups-src">—</span>
+              <span class="tag" id="ups-tag">—</span>
+            </span>
+          </div>
+          <div class="metric-value">
+            <span id="ups-value">--</span>
+            <span class="metric-unit">%</span>
+          </div>
+          <div class="bar" aria-hidden="true"><div class="bar-fill" id="ups-bar"></div></div>
+        </article>
+
+        <article class="metric" id="pdu-card">
+          <div class="metric-label">
+            <span>Consumo PDU</span>
+            <span class="metric-flags">
+              <span class="src-tag" id="pdu-src">—</span>
+              <span class="tag" id="pdu-tag">—</span>
+            </span>
+          </div>
+          <div class="metric-value">
+            <span id="pdu-value">----</span>
+            <span class="metric-unit">W</span>
+          </div>
+          <div class="bar" aria-hidden="true"><div class="bar-fill" id="pdu-bar"></div></div>
+        </article>
+      </div>
+
+      <!-- Health Score global -->
+      <section class="health-global">
+        <div class="health-global-head">
+          <span>HEALTH SCORE GLOBAL</span>
+          <strong id="health-value">100</strong>
+        </div>
+        <div class="bar" aria-hidden="true"><div class="bar-fill" id="health-bar"></div></div>
+        <p class="health-label" id="health-label">Sistema saludable</p>
+      </section>
+
+      <!-- Estado global -->
+      <section class="system" id="system-block" data-state="normal" aria-live="polite">
+        <div class="system-head">
+          <span>ESTADO DEL SISTEMA</span>
+          <span class="led" id="system-led" aria-hidden="true"></span>
+        </div>
+        <div class="system-state" id="system-state">NORMAL</div>
+        <p class="system-desc" id="system-desc">Todos los parámetros dentro de rango</p>
+      </section>
+
+      <!-- Análisis de IA global (topic datacenter/global/ia) -->
+      <section class="ia-block" id="ia-global" data-nivel="vacio" aria-live="polite">
+        <div class="ia-head">
+          <span class="ia-title">IA · PREDICCIÓN GLOBAL</span>
+          <span class="ia-riesgo" id="ia-g-riesgo">—</span>
+        </div>
+
+        <div class="ia-grid">
+          <div class="ia-cell">
+            <span>HEALTH IA</span>
+            <strong id="ia-g-health">—</strong>
+          </div>
+          <div class="ia-cell">
+            <span>ETA ALARMA</span>
+            <strong id="ia-g-eta">—</strong>
+          </div>
+          <div class="ia-cell">
+            <span>ANOMALÍA</span>
+            <strong id="ia-g-anomalia">—</strong>
+          </div>
+          <div class="ia-cell">
+            <span>TENDENCIA</span>
+            <strong id="ia-g-tendencia">—</strong>
+          </div>
+        </div>
+
+        <div class="ia-pronostico">
+          <span class="ia-sub">PRONÓSTICO · °C</span>
+          <div class="ia-pronostico-row">
+            <span><i>P10</i><b id="ia-g-p10">—</b></span>
+            <span><i>P50</i><b id="ia-g-p50">—</b></span>
+            <span><i>P90</i><b id="ia-g-p90">—</b></span>
+          </div>
+        </div>
+
+        <p class="ia-rec" id="ia-g-rec">Sin datos de IA todavía.</p>
+      </section>
+
+      <!-- MQTT + simulador -->
+      <div class="panel-foot">
+        <div class="mqtt">
+          <span class="status-dot" id="mqtt-dot" aria-hidden="true"></span>
+          <span id="mqtt-text">Conectando…</span>
+        </div>
+
+        <div class="panel-foot-switches">
+          <label class="switch" title="Activa o pausa el generador de datos de prueba">
+            <input type="checkbox" id="sim-toggle" checked />
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-label">SIM <b id="sim-state">ACTIVO</b></span>
+          </label>
+
+          <label class="switch" title="Silencia o activa las alertas de Telegram (útil en pruebas)">
+            <input type="checkbox" id="tg-toggle" checked />
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-label">TG <b id="tg-state">ON</b></span>
+          </label>
+        </div>
+
+        <div class="panel-foot-links">
+          <button class="link-btn" id="btn-historico" type="button">HISTÓRICO · CSV</button>
+          <button class="link-btn" id="btn-mqtt-config" type="button">CREDENCIALES MQTT</button>
+          <button class="link-btn" id="btn-tg-config" type="button" title="Configura el token del bot y el chat_id">ALERTAS TG</button>
+        </div>
+      </div>
+
+      <div class="source">Fuente actual: <b id="source-badge">SIMULADOR</b></div>
+    </aside>
+
+    <!-- PANEL LATERAL DE DETALLE -->
+    <aside class="panel-detalle" id="panel-detalle" aria-hidden="true" aria-label="Detalle del componente">
+      <button class="panel-cerrar" id="btn-cerrar-panel" type="button" aria-label="Cerrar panel">×</button>
+
+      <div class="detalle-head">
+        <span class="detalle-categoria" id="detalle-categoria">RACK</span>
+        <h2 id="detalle-nombre">RACK-01</h2>
+        <p id="detalle-descripcion">Rack 48U con puerta frontal y rPDU integrada.</p>
+      </div>
+
+      <div class="detalle-estado" id="detalle-estado" data-state="normal">
+        <span class="led" aria-hidden="true"></span>
+        <span id="detalle-estado-texto">NORMAL</span>
+      </div>
+
+      <!-- Métricas (solo racks) · sensores físicos vs eléctricos -->
+      <div class="detalle-metricas solo-rack">
+        <div class="detalle-metrica" data-metrica="temp">
+          <span class="dm-name">TEMP</span>
+          <strong id="detalle-temp">--.-°</strong>
+          <span class="dm-src" id="detalle-temp-src">—</span>
+        </div>
+        <div class="detalle-metrica" data-metrica="hum">
+          <span class="dm-name">HUM</span>
+          <strong id="detalle-hum">--.-%</strong>
+          <span class="dm-src" id="detalle-hum-src">—</span>
+        </div>
+        <div class="detalle-metrica" data-metrica="agua">
+          <span class="dm-name">AGUA</span>
+          <strong id="detalle-agua">--</strong>
+          <span class="dm-src" id="detalle-agua-src">—</span>
+        </div>
+        <div class="detalle-metrica" data-metrica="puerta">
+          <span class="dm-name">PUERTA</span>
+          <strong id="detalle-puerta">--</strong>
+          <span class="dm-src" id="detalle-puerta-src">—</span>
+        </div>
+        <div class="detalle-metrica" data-metrica="ups">
+          <span class="dm-name">UPS</span>
+          <strong id="detalle-ups">--%</strong>
+          <span class="dm-src" id="detalle-ups-src">—</span>
+        </div>
+        <div class="detalle-metrica" data-metrica="pdu">
+          <span class="dm-name">PDU</span>
+          <strong id="detalle-pdu">----W</strong>
+          <span class="dm-src" id="detalle-pdu-src">—</span>
+        </div>
+      </div>
+
+      <!-- Salud + predicción (solo racks) -->
+      <div class="detalle-salud solo-rack">
+        <div class="health-ring" id="detalle-health-ring">
+          <span id="detalle-health">100</span>
+        </div>
+        <div class="salud-texto">
+          <p class="mini-label">HEALTH SCORE</p>
+          <p id="detalle-vida">Vida útil estimada: —</p>
+          <p id="detalle-prediccion">Tendencia: —</p>
+        </div>
+      </div>
+
+      <!-- Análisis de IA del rack (topic datacenter/rack/<nn>/ia) -->
+      <section class="ia-block solo-rack" id="ia-rack" data-nivel="vacio" aria-live="polite">
+        <div class="ia-head">
+          <span class="ia-title">IA · PREDICCIÓN DEL RACK</span>
+          <span class="ia-riesgo" id="ia-r-riesgo">—</span>
+        </div>
+
+        <div class="ia-grid">
+          <div class="ia-cell">
+            <span>HEALTH IA</span>
+            <strong id="ia-r-health">—</strong>
+          </div>
+          <div class="ia-cell">
+            <span>ETA ALARMA</span>
+            <strong id="ia-r-eta">—</strong>
+          </div>
+          <div class="ia-cell">
+            <span>ANOMALÍA</span>
+            <strong id="ia-r-anomalia">—</strong>
+          </div>
+          <div class="ia-cell">
+            <span>TENDENCIA</span>
+            <strong id="ia-r-tendencia">—</strong>
+          </div>
+        </div>
+
+        <div class="ia-pronostico">
+          <span class="ia-sub">PRONÓSTICO · °C</span>
+          <div class="ia-pronostico-row">
+            <span><i>P10</i><b id="ia-r-p10">—</b></span>
+            <span><i>P50</i><b id="ia-r-p50">—</b></span>
+            <span><i>P90</i><b id="ia-r-p90">—</b></span>
+          </div>
+        </div>
+
+        <p class="ia-rec" id="ia-r-rec">Sin datos de IA todavía.</p>
+      </section>
+
+      <!-- Gráfica histórica (solo racks) -->
+      <div class="chart-wrap solo-rack" id="chart-wrap">
+        <div class="chart-head">
+          <span>HISTÓRICO TEMPERATURA</span>
+          <span id="chart-max">—</span>
+        </div>
+        <div class="chart-canvas">
+          <canvas id="grafica-temp"></canvas>
+        </div>
+      </div>
+
+      <!-- Control aislado de laboratorio (solo racks) -->
+      <section class="lab-block solo-rack" id="lab-block" aria-label="Control aislado de laboratorio">
+        <div class="lab-head">
+          <span class="lab-title">SALIDA DE LABORATORIO · CONTROL AISLADO</span>
+          <span class="lab-badge">Baja tensión</span>
+        </div>
+        <p class="lab-desc">
+          Salida de relé optoacoplado para el ventilador del rack (demostración).
+          No energiza equipo industrial real. Orden por defecto: OFF.
+        </p>
+        <div class="lab-seg" role="group" aria-label="Control del ventilador">
+          <button class="lab-btn" type="button" data-fan="OFF">OFF</button>
+          <button class="lab-btn" type="button" data-fan="ON">ON</button>
+          <button class="lab-btn" type="button" data-fan="AUTO">AUTO (IA)</button>
+        </div>
+        <p class="lab-status" id="lab-status">Estado: OFF (seguro)</p>
+      </section>
+
+      <!-- Mensaje para componentes sin telemetría -->
+      <p class="detalle-sin-datos" id="detalle-sin-datos">
+        Este componente no tiene telemetría directa. Selecciona un rack para ver su histórico y su Health Score.
+      </p>
+
+      <div class="detalle-footer">
+        <button class="btn" id="btn-enfocar" type="button">ENFOCAR</button>
+        <button class="btn" id="btn-puertas-panel" type="button">ABRIR PUERTAS</button>
+        <button
+          class="btn solo-rack"
+          id="btn-mantenimiento"
+          type="button"
+          aria-pressed="false"
+        >ALTERNAR MANTENIMIENTO</button>
+      </div>
+    </aside>
+
+    <!-- PIE: AYUDA Y CONTROLES -->
+    <footer class="hud-bottom">
+      <p class="hint">
+        <kbd>Arrastrar</kbd> rotar · <kbd>Rueda</kbd> zoom · <kbd>Clic</kbd> seleccionar rack
+      </p>
+
+      <div class="controls">
+        <button class="btn" id="btn-puertas" type="button">ABRIR PUERTAS</button>
+        <button class="btn active" id="btn-etiquetas" type="button">ETIQUETAS</button>
+        <button class="btn" id="btn-reset" type="button">CENTRAR VISTA</button>
+      </div>
+    </footer>
+
+    <!-- Tooltip de hover -->
+    <div id="tooltip" role="tooltip"></div>
+
+    <!-- MODAL: HISTÓRICO / EXPORTAR CSV -->
+    <div
+      id="historial-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-label="Histórico de eventos y muestras"
+    >
+      <div class="modal-box">
+        <div class="modal-head">
+          <span>BITÁCORA · HISTÓRICO</span>
+          <button class="modal-cerrar" id="btn-historial-cerrar" type="button" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-toolbar">
+          <div class="modal-tabs">
+            <button class="modal-tab active" type="button" data-hist-tab="eventos">EVENTOS</button>
+            <button class="modal-tab" type="button" data-hist-tab="muestras">MUESTRAS</button>
+          </div>
+          <span class="modal-resumen" id="historial-resumen">—</span>
+        </div>
+
+        <div class="modal-body">
+          <table class="hist-tabla">
+            <thead id="historial-thead"></thead>
+            <tbody id="historial-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn" id="btn-export-eventos" type="button">EXPORTAR EVENTOS CSV</button>
+          <button class="btn" id="btn-export-muestras" type="button">EXPORTAR MUESTRAS CSV</button>
+          <button class="btn ghost" id="btn-historial-limpiar" type="button">LIMPIAR</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: CREDENCIALES MQTT -->
+    <div
+      id="mqtt-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-label="Credenciales MQTT"
+    >
+      <div class="modal-box modal-box-sm">
+        <div class="modal-head">
+          <span>CONEXIÓN MQTT · CREDENCIALES</span>
+          <button class="modal-cerrar" id="btn-mqtt-cerrar" type="button" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="field">
+            <label for="mqtt-url">URL DEL BROKER (WebSocket)</label>
+            <input id="mqtt-url" type="text" placeholder="ws://127.0.0.1:9001" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="mqtt-user">USUARIO (opcional)</label>
+            <input id="mqtt-user" type="text" placeholder="cliente" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label for="mqtt-pass">CONTRASEÑA (opcional)</label>
+            <input id="mqtt-pass" type="password" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <p class="modal-nota">
+            Se guardan solo en este navegador (localStorage); no están escritas en el código fuente.
+          </p>
+          <p class="modal-resumen" id="mqtt-config-status">Cliente anónimo (sin contraseña).</p>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn" id="btn-mqtt-guardar" type="button">GUARDAR Y RECONECTAR</button>
+          <button class="btn ghost" id="btn-mqtt-reconectar" type="button">RECONECTAR</button>
+          <button class="btn ghost" id="btn-mqtt-limpiar" type="button">BORRAR CREDENCIALES</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: ALERTAS TELEGRAM -->
+    <div
+      id="tg-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-label="Alertas de Telegram"
+    >
+      <div class="modal-box modal-box-sm">
+        <div class="modal-head">
+          <span>ALERTAS · TELEGRAM</span>
+          <button class="modal-cerrar" id="btn-tg-cerrar" type="button" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="field">
+            <label for="tg-token">TOKEN DEL BOT</label>
+            <input id="tg-token" type="password" placeholder="123456789:AA..." autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="tg-chat">CHAT ID</label>
+            <input id="tg-chat" type="text" placeholder="123456789" autocomplete="off" />
+          </div>
+          <p class="modal-nota">
+            Se guardan solo en este navegador (localStorage); no están escritas en el código fuente.
+            Crea el bot con <b>@BotFather</b> y obtén el chat_id hablando con el bot.
+          </p>
+          <p class="modal-resumen" id="tg-config-status">Sin configurar · alertas en modo simulación.</p>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn" id="btn-tg-guardar" type="button">GUARDAR</button>
+          <button class="btn ghost" id="btn-tg-limpiar" type="button">BORRAR CREDENCIALES</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANTALLA DE CARGA -->
+    <div id="loader">
+      <div class="loader-box">
+        <div class="loader-ring" aria-hidden="true"></div>
+        <h2>CARGANDO GEMELO DIGITAL</h2>
+        <p id="loader-msg">Iniciando renderizado 3D…</p>
+        <div class="loader-track" aria-hidden="true"><div class="loader-bar" id="loader-bar"></div></div>
+        <span class="loader-pct" id="loader-pct">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Punto de entrada modular -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

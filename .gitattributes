@@ -1,0 +1,16 @@
+# ============================================================================
+#  .gitattributes — normalización de texto y Git LFS para el modelo 3D
+# ============================================================================
+
+# Git detecta texto y normaliza a LF en el repositorio.
+* text=auto
+
+# Los scripts de Windows se guardan/extraen con CRLF para que cmd y
+# PowerShell no tengan problemas.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# Modelo 3D pesado (~65 MB): se sirve con Git LFS.
+*.glb filter=lfs diff=lfs merge=lfs -text
+*.gltf filter=lfs diff=lfs merge=lfs -text
